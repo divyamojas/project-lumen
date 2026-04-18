@@ -1,0 +1,11 @@
+# Sibling repos cloned inside this folder — not tracked by this repo
+project-lumen-light/
+project-lumen-source/
+
+# Mac
+.DS_Store
+
+# Environment files should never be here but just in case
+.env
+.env.local
+*.env
