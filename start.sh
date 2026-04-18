@@ -478,6 +478,8 @@ wait_for_url() {
   local timeout_seconds="$3"
   local curl_args=("${@:4}")
   local deadline=$((SECONDS + timeout_seconds))
+  local next_progress=5
+  local elapsed=0
 
   require_command curl "curl is required for readiness checks."
 
@@ -485,6 +487,35 @@ wait_for_url() {
     if curl "${curl_args[@]}" "$url" > /dev/null 2>&1; then
       say "${GREEN}      $label ready.${NC}"
       return 0
+    fi
+
+    elapsed=$((timeout_seconds - (deadline - SECONDS)))
+    if [ "$elapsed" -ge "$next_progress" ]; then
+      say "${YELLOW}      Waiting for $label... ${elapsed}s/${timeout_seconds}s${NC}"
+      next_progress=$((next_progress + 5))
+    fi
+    sleep 1
+  done
+
+  return 1
+}
+
+wait_for_proxy() {
+  local timeout_seconds="$1"
+  local deadline=$((SECONDS + timeout_seconds))
+  local next_progress=5
+  local elapsed=0
+
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    if run_compose exec -T proxy wget -q --spider --no-check-certificate https://127.0.0.1 > /dev/null 2>&1; then
+      say "${GREEN}      HTTPS proxy ready.${NC}"
+      return 0
+    fi
+
+    elapsed=$((timeout_seconds - (deadline - SECONDS)))
+    if [ "$elapsed" -ge "$next_progress" ]; then
+      say "${YELLOW}      Waiting for HTTPS proxy... ${elapsed}s/${timeout_seconds}s${NC}"
+      next_progress=$((next_progress + 5))
     fi
     sleep 1
   done
@@ -560,13 +591,13 @@ start_stack() {
     fail "Frontend did not become ready within 60 seconds. Logs saved to $LOG_FILE"
   fi
 
-  if ! wait_for_url "HTTPS proxy" "https://127.0.0.1" 60 --silent --show-error --fail --insecure; then
+  if ! wait_for_proxy 60; then
     capture_failure_logs
     fail "HTTPS proxy did not become ready within 60 seconds. Logs saved to $LOG_FILE"
   fi
 
   if backend_can_start; then
-    if ! wait_for_url "API" "http://127.0.0.1:8000/health" 60 --silent --show-error --fail; then
+    if ! wait_for_url "API" "http://127.0.0.1:8000/docs" 60 --silent --show-error --fail; then
       capture_failure_logs
       fail "API did not become ready within 60 seconds. Logs saved to $LOG_FILE"
     fi
