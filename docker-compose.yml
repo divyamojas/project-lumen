@@ -1,5 +1,46 @@
+name: project-lumen
+
 services:
+  app:
+    build:
+      context: ./project-lumen-light
+      dockerfile: Dockerfile
+    container_name: lumen-app
+    ports:
+      - "0.0.0.0:3000:3000"
+    environment:
+      NODE_ENV: development
+      HOST: 0.0.0.0
+      PORT: 3000
+    volumes:
+      - ./project-lumen-light:/app
+      - project_lumen_node_modules:/app/node_modules
+    command: sh -c "if [ ! -d node_modules/next ]; then npm ci; fi && rm -rf .next && npm run dev"
+    restart: unless-stopped
+    networks:
+      - lumen
+
+  proxy:
+    image: caddy:2-alpine
+    container_name: lumen-proxy
+    depends_on:
+      - app
+    ports:
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
+    environment:
+      LAN_HOST: ${LAN_HOST:-127.0.0.1}
+    volumes:
+      - ./project-lumen-light/Caddyfile:/etc/caddy/Caddyfile:ro
+      - project_lumen_caddy_data:/data
+      - project_lumen_caddy_config:/config
+    restart: unless-stopped
+    networks:
+      - lumen
+
   api:
+    profiles:
+      - api
     build:
       context: ./project-lumen-source
       dockerfile: Dockerfile
@@ -13,7 +54,15 @@ services:
     networks:
       - lumen
 
+volumes:
+  project_lumen_node_modules:
+    name: project_lumen_node_modules
+  project_lumen_caddy_data:
+    name: project_lumen_caddy_data
+  project_lumen_caddy_config:
+    name: project_lumen_caddy_config
+
 networks:
   lumen:
-    external: true
     name: lumen
+    driver: bridge

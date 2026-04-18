@@ -1,6 +1,6 @@
 # Lumen Orchestrator — Claude Context
 
-## Current State (as of 2026-04-18)
+## Current State (as of 2026-04-19)
 This repo is the local Docker orchestrator for Lumen. It does not contain application code.
 
 Current sibling repos:
@@ -24,17 +24,22 @@ Do not treat this file as a replacement for the more specific `CLAUDE.md` files 
 
 ## Files Owned Here
 - `start.sh` — the canonical way to start, rebuild, and stop the local stack
-- `docker-compose.yml` — runs the backend container and joins the external `lumen` network
+- `docker-compose.yml` — runs the frontend app, local HTTPS proxy, and optional backend in one Compose app
 - `README.md` — human-facing local setup and usage notes
 - `CLAUDE.md` — shared orchestration rules and cross-repo contract
+- `AGENTS.md` — lean root-repo execution guide for coding agents
 
 ## Running Locally
 Use Docker only.
 
 ```bash
 ./start.sh
-./start.sh --build
+./start.sh --rebuild
+./start.sh --clean
 ./start.sh --down
+./start.sh --status
+./start.sh --logs
+./start.sh --doctor
 ```
 
 Expected local URLs:
@@ -45,14 +50,23 @@ Expected local URLs:
 
 ## Startup Behavior
 `start.sh` is intentionally opinionated:
+- Bootstraps missing root/sibling repos from the configured Git remotes
+- Initializes local git metadata and expected `origin` remotes when a repo exists without `.git`
+- Seeds backend `.env` from `.env.example` when possible
 - Verifies Docker and `docker compose` are available
 - Refuses to start if ports `3000`, `8000`, `80`, or `443` are already in use
-- Starts the frontend first so it creates the shared Docker network `lumen`
-- Waits for that network before starting the backend
-- Starts frontend-only when `project-lumen-source/` is missing
-- Requires `project-lumen-source/.env` when the backend repo is present
+- Starts the single root Compose app from this repo
+- Enables the backend `api` profile automatically only when the backend repo exists and the required env keys are populated
+- Starts frontend-only when the backend repo is missing or its `.env` is not ready
+- Waits for frontend, HTTPS proxy, and API readiness before printing success
 
-The root `docker-compose.yml` assumes the `lumen` network already exists and joins it as an external network.
+Command semantics:
+- `--down` stops the stack only
+- `--clean` runs `docker compose down --volumes --remove-orphans`
+- `--rebuild` runs the clean path first, then rebuilds and starts
+- `--doctor` runs bootstrap plus preflight checks without starting containers
+
+The root `docker-compose.yml` owns the shared `lumen` bridge network for all local services.
 
 ## Phase Status
 - **Phase 1:** Frontend MVP complete; backend Phase 1 complete (full entry CRUD, JWT auth, RBAC, admin API, schema introspection, file-based migrations, raw SQL); frontend-backend not yet wired
@@ -159,6 +173,8 @@ Backend (required):
 - `SUPABASE_SECRET_KEY` — `sb_secret_...` key, bypasses RLS
 - `SUPABASE_PUBLISHABLE_KEY` — `sb_publishable_...` key, used for HS256 fallback auth
 - `DATABASE_URL` — direct Postgres connection for asyncpg (URL-encode special chars in password)
+
+The root startup script should treat the backend as startable only when all four required keys are populated.
 
 Backend (optional/legacy):
 - `SUPABASE_JWT_SECRET` — legacy HS256 shared secret
