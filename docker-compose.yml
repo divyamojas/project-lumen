@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     container_name: lumen-api
     ports:
-      - "0.0.0.0:8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./project-lumen-source:/app
     env_file: ./project-lumen-source/.env

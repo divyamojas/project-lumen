@@ -70,14 +70,14 @@ Return 404 (not 403) when an owned resource is not found — prevents user enume
 ## Environment Variables
 Never hardcode secrets. All values come from `.env` files in each repo.
 
-| Variable                    | Used by  |
-|-----------------------------|----------|
-| NEXT_PUBLIC_SUPABASE_URL    | frontend |
+| Variable                      | Used by  |
+|-------------------------------|----------|
+| NEXT_PUBLIC_SUPABASE_URL      | frontend |
 | NEXT_PUBLIC_SUPABASE_ANON_KEY | frontend |
-| NEXT_PUBLIC_API_URL         | frontend |
-| SUPABASE_URL                | backend  |
-| SUPABASE_JWT_SECRET         | backend  |
-| DATABASE_URL                | backend  |
+| NEXT_PUBLIC_API_URL           | frontend |
+| SUPABASE_URL                  | backend  |
+| SUPABASE_ANON_KEY             | backend  |
+| SUPABASE_JWT_SECRET           | backend  |
 
 ## Universal Rules
 Apply everywhere, no exceptions:

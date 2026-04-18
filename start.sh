@@ -36,14 +36,10 @@ fail() {
 # ── Tear Down ──────────────────────────────────────────────────
 if [ "$TAKE_DOWN" = true ]; then
   echo -e "${YELLOW}Stopping all Lumen services...${NC}"
-  if [ -d "$BACKEND_DIR" ]; then
-    echo -e "${YELLOW}→ Stopping API...${NC}"
-    cd "$ROOT_DIR" && docker compose down 2>/dev/null || true
-  fi
-  if [ -d "$FRONTEND_DIR" ]; then
-    echo -e "${YELLOW}→ Stopping frontend...${NC}"
-    cd "$FRONTEND_DIR" && docker compose down 2>/dev/null || true
-  fi
+  echo -e "${YELLOW}→ Stopping API...${NC}"
+  cd "$ROOT_DIR" && docker compose down 2>/dev/null || true
+  echo -e "${YELLOW}→ Stopping frontend...${NC}"
+  cd "$FRONTEND_DIR" && docker compose down 2>/dev/null || true
   echo -e "${GREEN}All services stopped.${NC}"
   exit 0
 fi
