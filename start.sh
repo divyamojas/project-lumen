@@ -31,7 +31,6 @@ for arg in "$@"; do
 done
 
 mkdir -p "$LOG_DIR"
-rm -f "$TAIL_PID_FILE"
 
 # ── Helpers ─────────────────────────────────────────────────────
 log() {
@@ -57,6 +56,7 @@ stop_log_tails() {
 if [ "$TAKE_DOWN" = true ]; then
   echo -e "${YELLOW}Stopping all Lumen services...${NC}"
   stop_log_tails
+  rm -f "$TAIL_PID_FILE"
   echo -e "${YELLOW}→ Stopping API...${NC}"
   cd "$ROOT_DIR" && docker compose down 2>/dev/null || true
   echo -e "${YELLOW}→ Stopping frontend...${NC}"
@@ -66,6 +66,8 @@ if [ "$TAKE_DOWN" = true ]; then
 fi
 
 # ── Pre-flight Checks ──────────────────────────────────────────
+rm -f "$TAIL_PID_FILE"
+
 echo -e "${GREEN}Lumen — Starting services...${NC}"
 echo ""
 log "Starting Lumen (log: $LOG_FILE)"

@@ -29,6 +29,13 @@ git clone https://github.com/divyamojas/project-lumen-source
 chmod +x start.sh
 ```
 
+Create and populate the backend env file (start.sh will error without it):
+
+```text
+cp project-lumen-source/.env.example project-lumen-source/.env
+# then fill in SUPABASE_URL, SUPABASE_SECRET_KEY, SUPABASE_PUBLISHABLE_KEY, DATABASE_URL
+```
+
 ## Running the Stack
 
 ```text
@@ -36,6 +43,9 @@ chmod +x start.sh
 ./start.sh --build   # rebuild images (after dependency changes)
 ./start.sh --down    # stop everything
 ```
+
+Each run writes a timestamped log to `logs/lumen-<timestamp>.log` containing
+startup events and live container output from both services.
 
 ## Service URLs
 
