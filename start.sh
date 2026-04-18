@@ -11,6 +11,9 @@
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FRONTEND_DIR="$ROOT_DIR/project-lumen-light"
 BACKEND_DIR="$ROOT_DIR/project-lumen-source"
+LOG_DIR="$ROOT_DIR/logs"
+LOG_FILE="$LOG_DIR/lumen-$(date +%Y-%m-%dT%H-%M-%S).log"
+TAIL_PID_FILE="$LOG_DIR/.tail.pid"
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -27,15 +30,33 @@ for arg in "$@"; do
   esac
 done
 
-# ── Helper ─────────────────────────────────────────────────────
+mkdir -p "$LOG_DIR"
+rm -f "$TAIL_PID_FILE"
+
+# ── Helpers ─────────────────────────────────────────────────────
+log() {
+  echo "[$(date +%Y-%m-%dT%H:%M:%S)] $1" >> "$LOG_FILE"
+}
+
 fail() {
   echo -e "${RED}ERROR: $1${NC}"
+  log "ERROR: $1"
   exit 1
+}
+
+stop_log_tails() {
+  if [ -f "$TAIL_PID_FILE" ]; then
+    while IFS= read -r pid; do
+      kill "$pid" 2>/dev/null || true
+    done < "$TAIL_PID_FILE"
+    rm -f "$TAIL_PID_FILE"
+  fi
 }
 
 # ── Tear Down ──────────────────────────────────────────────────
 if [ "$TAKE_DOWN" = true ]; then
   echo -e "${YELLOW}Stopping all Lumen services...${NC}"
+  stop_log_tails
   echo -e "${YELLOW}→ Stopping API...${NC}"
   cd "$ROOT_DIR" && docker compose down 2>/dev/null || true
   echo -e "${YELLOW}→ Stopping frontend...${NC}"
@@ -47,6 +68,7 @@ fi
 # ── Pre-flight Checks ──────────────────────────────────────────
 echo -e "${GREEN}Lumen — Starting services...${NC}"
 echo ""
+log "Starting Lumen (log: $LOG_FILE)"
 
 # Check Docker is running
 if ! docker info > /dev/null 2>&1; then
@@ -79,7 +101,9 @@ fi
 echo -e "${YELLOW}[1/2] Starting frontend...${NC}"
 cd "$FRONTEND_DIR"
 if ! docker compose up -d $BUILD_FLAG; then
-  fail "Frontend failed to start.\nDebug with:\n  cd project-lumen-light && docker compose logs"
+  log "Frontend startup failed — capturing container logs"
+  docker compose logs >> "$LOG_FILE" 2>&1
+  fail "Frontend failed to start. Logs saved to $LOG_FILE\nDebug with:\n  cd project-lumen-light && docker compose logs"
 fi
 
 # Wait for lumen network
@@ -94,6 +118,8 @@ for i in {1..15}; do
 done
 
 if [ "$NETWORK_READY" = false ]; then
+  log "Timed out waiting for lumen network — capturing container logs"
+  docker compose logs >> "$LOG_FILE" 2>&1
   echo -e "${RED}Timed out waiting for lumen network.${NC}"
   echo -e "${RED}Check what went wrong:${NC}"
   echo -e "${RED}  cd project-lumen-light && docker compose logs${NC}"
@@ -103,18 +129,26 @@ if [ "$NETWORK_READY" = false ]; then
 fi
 echo -e "${GREEN}      Frontend ready.${NC}"
 
+(cd "$FRONTEND_DIR" && docker compose logs -f 2>&1) >> "$LOG_FILE" &
+echo $! >> "$TAIL_PID_FILE"
+
 # ── Step 2: Start API ───────────────────────────────────────────
 if [ -d "$BACKEND_DIR" ]; then
   echo -e "${YELLOW}[2/2] Starting API...${NC}"
   cd "$ROOT_DIR"
   if ! docker compose up -d $BUILD_FLAG; then
-    echo -e "${RED}API failed to start.${NC}"
+    log "API startup failed — capturing container logs"
+    docker compose logs >> "$LOG_FILE" 2>&1
+    echo -e "${RED}API failed to start. Logs saved to $LOG_FILE${NC}"
     echo -e "${RED}Debug with:${NC}"
     echo -e "${RED}  cd project-lumen && docker compose logs${NC}"
     echo -e "${YELLOW}Frontend is still running at http://localhost:3000${NC}"
     exit 1
   fi
   echo -e "${GREEN}      API ready.${NC}"
+
+  (cd "$ROOT_DIR" && docker compose logs -f 2>&1) >> "$LOG_FILE" &
+  echo $! >> "$TAIL_PID_FILE"
 else
   echo -e "${YELLOW}[2/2] project-lumen-source not found — skipping API.${NC}"
   echo -e "${YELLOW}      Clone when ready:${NC}"
@@ -134,3 +168,5 @@ fi
 echo ""
 echo "  Stop all:   ./start.sh --down"
 echo "  Rebuild:    ./start.sh --build"
+echo ""
+echo -e "${YELLOW}  Logs:       $LOG_FILE${NC}"

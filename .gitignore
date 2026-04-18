@@ -9,3 +9,6 @@ project-lumen-source/
 .env
 .env.local
 *.env
+
+# Runtime logs
+logs/
