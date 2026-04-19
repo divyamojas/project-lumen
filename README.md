@@ -46,6 +46,16 @@ docker compose up
 
 All features from v1 are present and improved in v2.
 
+## Helpful Scripts
+
+```bash
+./push.sh
+```
+
+Pushes the current branch in `project-lumen`, `project-lumen-light`, and
+`project-lumen-source` in sequence. Any extra arguments are passed through to
+each `git push`, for example `./push.sh --force-with-lease`.
+
 The root `./start.sh` orchestrator in `project-lumen/` now reports actionable
 startup failures for common local issues such as no internet/DNS resolution,
 Docker access problems, port conflicts, Docker Hub rate limits, and services
