@@ -4,30 +4,31 @@
 This repo is the local Docker orchestrator for Lumen. It does not contain application code.
 
 Current sibling repos:
-- `project-lumen/` — this repo; starts and stops the local stack
-- `project-lumen-light/` — Next.js 14 PWA frontend
+- `project-lumen/` — this repo; bootstraps and runs the local stack
+- `project-lumen-light/` — Next.js frontend
 - `project-lumen-source/` — FastAPI backend
 
 Current product status across the stack:
-- Frontend MVP is feature-complete and still runs primarily against local-first storage
-- Backend Phase 1 complete: full entry CRUD, JWT auth, RBAC, admin API, schema introspection, file-based migrations, raw SQL
-- Frontend and backend are not wired together yet; that integration belongs to Phase 2
+- Frontend and backend are now wired together for backend-managed authentication and authenticated API access
+- Frontend journal UX still keeps client-side persistence in IndexedDB/local cache
+- Backend owns auth verification, entry CRUD, RBAC, admin APIs, schema introspection, migrations, and raw SQL
+- The admin UI currently uses the backend for stats, user management, entry inspection, schema, migrations, and SQL console access
 
 ## Repo Boundaries
 Keep responsibilities separated:
-- Root repo: Docker orchestration, startup flow, shared cross-repo context
-- Frontend repo: UI, PWA behavior, client persistence, browser-only logic
-- Backend repo: API routes, auth verification, Supabase access, server-side models
+- Root repo: Docker orchestration, startup flow, local HTTPS proxy, shared cross-repo context
+- Frontend repo: UI, client routing, client persistence, session state, admin screens
+- Backend repo: auth endpoints, token verification, Supabase access, models, admin APIs
 
-Do not move frontend or backend application logic into this repo.
+Do not move frontend or backend app logic into this repo.
 Do not treat this file as a replacement for the more specific `CLAUDE.md` files in the sub-repos.
 
 ## Files Owned Here
-- `start.sh` — the canonical way to start, rebuild, and stop the local stack
-- `docker-compose.yml` — runs the frontend app, local HTTPS proxy, and optional backend in one Compose app
-- `README.md` — human-facing local setup and usage notes
-- `CLAUDE.md` — shared orchestration rules and cross-repo contract
-- `AGENTS.md` — lean root-repo execution guide for coding agents
+- `start.sh` — canonical local entrypoint for bootstrap, checks, start/stop, rebuild, logs, and tests
+- `docker-compose.yml` — single Compose app named `project-lumen` for `app`, `proxy`, and optional `api`
+- `README.md` — human-facing setup and operations guide
+- `CLAUDE.md` — cross-repo orchestration contract
+- `AGENTS.md` — lean execution guide for coding agents in this repo
 
 ## Running Locally
 Use Docker only.
@@ -39,7 +40,9 @@ Use Docker only.
 ./start.sh --down
 ./start.sh --status
 ./start.sh --logs
+./start.sh --logs=app
 ./start.sh --doctor
+./start.sh --test
 ```
 
 Expected local URLs:
@@ -50,7 +53,7 @@ Expected local URLs:
 
 ## Startup Behavior
 `start.sh` is intentionally opinionated:
-- Bootstraps missing root/sibling repos from the configured Git remotes
+- Bootstraps missing sibling repos from the configured Git remotes
 - Initializes local git metadata and expected `origin` remotes when a repo exists without `.git`
 - Seeds backend `.env` from `.env.example` when possible
 - Verifies Docker and `docker compose` are available
@@ -62,42 +65,41 @@ Expected local URLs:
 
 Command semantics:
 - `--down` stops the stack only
-- `--clean` runs `docker compose down --volumes --remove-orphans`
-- `--rebuild` runs the clean path first, then rebuilds and starts
+- `--clean` stops the stack and can remove volumes/images/orphans/cache depending on flags
+- `--rebuild` rebuilds and starts the stack
 - `--doctor` runs bootstrap plus preflight checks without starting containers
+- `--test` delegates to backend tests via `test.sh`
 
 The root `docker-compose.yml` owns the shared `lumen` bridge network for all local services.
 
-## Phase Status
-- **Phase 1:** Frontend MVP complete; backend Phase 1 complete (full entry CRUD, JWT auth, RBAC, admin API, schema introspection, file-based migrations, raw SQL); frontend-backend not yet wired
-- **Phase 2:** Wire frontend to backend, wire auth, and make IndexedDB a cache rather than the source of truth
-- **Phase 3:** S3 upload on entry save
-- **Phase 4:** Lambda plus Bedrock Knowledge Base for natural-language journal queries
-- **Phase 5:** AWS Comprehend sets entry theme from sentiment
-
-Never implement future phases unless explicitly asked.
-
 ## Shared Auth Contract
-Google OAuth via Supabase → Supabase issues JWT → FastAPI verifies JWT.
+Auth is backend-managed.
 
-Backend resolution order:
+Current flow:
+1. Frontend calls backend auth endpoints such as `/auth/login`, `/auth/sign-up`, or `/auth/google/start`
+2. Backend talks to Supabase Auth
+3. Frontend stores the returned bearer token locally
+4. Frontend sends `Authorization: Bearer <token>` on authenticated API requests
+5. Backend verifies the JWT and resolves `user_id` from `sub`
+
+Backend verification order:
 1. Asymmetric token (RS256/ES256) → verify via JWKS at `SUPABASE_URL/auth/v1/.well-known/jwks.json`
 2. HS256 + `SUPABASE_JWT_SECRET` set → verify locally
 3. HS256, no secret → verify remotely via `/auth/v1/user` with `SUPABASE_PUBLISHABLE_KEY`
 
 Cross-repo rules:
-- Frontend sends `Authorization: Bearer <token>` on all authenticated API requests
-- Backend extracts `user_id` from the verified JWT `sub` claim
-- Never trust `user_id` from a request body or query param
+- Never trust `user_id` from request body or query params
 - Missing or invalid JWT → 401
+- Owned-resource miss → 404, not 403
 
 ## RBAC
-Backend enforces role-based access via `require_role(minimum_role)`. Hierarchy: `user < admin < superuser`.
-Caller role is looked up from the `user_roles` table. Raises 403 on insufficient role.
-Frontend has no role concept — all admin endpoints are backend-only.
+Backend enforces role-based access via `require_role(minimum_role)`.
+Hierarchy: `user < admin < superuser`.
 
-## Entry Schema (frontend <-> backend contract)
-Both application repos must stay aligned with this shape.
+Frontend has no independent role system. It derives admin access from backend responses and bearer-authenticated requests.
+
+## Entry Contract
+Both application repos should stay aligned with this shape:
 
 ```js
 {
@@ -120,45 +122,24 @@ Both application repos must stay aligned with this shape.
 ```
 
 Field expectations:
-- `id` is stable after creation
 - `title` is trimmed and capped at 100 chars
 - `body` is trimmed and non-empty
-- `createdAt` is written once and never mutated
-- `updatedAt` is refreshed on every edit
-- `accentColor` is never reassigned after creation
+- `createdAt` is write-once
+- `updatedAt` is refreshed on edit
+- `accentColor` is stable after creation
 - `theme` currently defaults to `"neutral"`
 - `tags` are normalized slug-like strings
-- `collection` is a short human-readable label
 
-## API Contract (Phase 2 target)
-Internal base URL: `http://lumen-api:8000`
+## API Contract
+Internal base URL inside Docker: `http://lumen-api:8000`
 
-**User endpoints** (require valid JWT, `user` role minimum):
+Key backend routes used today:
+- Auth: `/auth/login`, `/auth/sign-up`, `/auth/reset-password`, `/auth/google/start`, `/auth/logout`
+- User: `/users/me`
+- Entries: `/entries`
+- Admin UI: `/admin/stats`, `/admin/users`, `/admin/entries`, `/admin/schema`, `/admin/schema/migrations`, `/admin/sql`
 
-| Method | Path | Description |
-|---|---|---|
-| POST | `/entries` | Create entry |
-| GET | `/entries` | List entries |
-| GET | `/entries/{id}` | Get single entry |
-| PATCH | `/entries/{id}` | Update entry |
-| DELETE | `/entries/{id}` | Delete entry |
-| GET | `/users/me` | Current user info |
-| GET | `/health` | Health check (no auth) |
-
-**Admin endpoints** (backend-only; `admin` or `superuser` role required — see backend CLAUDE.md for full matrix):
-
-| Method | Path | Min role |
-|---|---|---|
-| GET | `/admin/stats` | admin |
-| GET | `/admin/users` | admin |
-| PATCH | `/admin/users/{id}/role` | superuser |
-| DELETE | `/admin/users/{id}` | superuser |
-| GET | `/admin/entries` | superuser |
-| POST | `/admin/sql` | superuser |
-
-All authenticated endpoints require `Authorization: Bearer <jwt>`.
-Return `404`, not `403`, when an owned resource is not found.
-Return `401` for missing or invalid JWT.
+Broader superuser APIs also exist for direct auth-user and generic table management; see backend context for the full list.
 
 ## Environment Variables
 Never hardcode secrets. Values come from repo-local `.env` files.
@@ -170,22 +151,26 @@ Frontend:
 
 Backend (required):
 - `SUPABASE_URL`
-- `SUPABASE_SECRET_KEY` — `sb_secret_...` key, bypasses RLS
-- `SUPABASE_PUBLISHABLE_KEY` — `sb_publishable_...` key, used for HS256 fallback auth
-- `DATABASE_URL` — direct Postgres connection for asyncpg (URL-encode special chars in password)
-
-The root startup script should treat the backend as startable only when all four required keys are populated.
+- `SUPABASE_SECRET_KEY`
+- `SUPABASE_PUBLISHABLE_KEY`
+- `DATABASE_URL`
 
 Backend (optional/legacy):
-- `SUPABASE_JWT_SECRET` — legacy HS256 shared secret
-- `SUPABASE_JWKS_URL` — override JWKS endpoint
-- `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY` — legacy keys
+- `SUPABASE_JWT_SECRET`
+- `SUPABASE_JWKS_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_ANON_KEY`
+- `CORS_ORIGINS`
 
 ## Universal Rules
 Apply everywhere:
-- No TypeScript; use JavaScript in frontend code and Python in backend code
+- No TypeScript; frontend is JavaScript, backend is Python
 - No local installs; use Docker only
 - No hardcoded secrets
 - `user_id` always comes from JWT verification
 - Return `404`, not `403`, for owned-resource-not-found
-- No ORM; backend uses the Supabase client directly
+- No ORM; backend uses Supabase client plus asyncpg only
+
+## Future Phases
+- Keep future roadmap work opt-in only
+- Do not automatically implement AWS/S3/Lambda/Bedrock/Comprehend work unless explicitly requested

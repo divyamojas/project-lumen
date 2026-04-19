@@ -2,7 +2,7 @@
 
 ## Project Summary
 This repository is the local Docker orchestrator for Lumen.
-It owns the top-level startup flow, Docker Compose app, local HTTPS proxy wiring, and cross-repo bootstrap behavior.
+It owns the top-level startup flow, the single Compose app, local HTTPS proxy wiring, and shared cross-repo expectations.
 It does not own frontend UI logic or backend API implementation.
 
 Sibling repos expected beside this root:
@@ -11,11 +11,11 @@ Sibling repos expected beside this root:
 - `project-lumen-source/` — FastAPI backend
 
 ## Files That Matter Here
-- `start.sh` — canonical local entrypoint for bootstrap, doctor checks, start, stop, clean, rebuild, status, and logs
-- `docker-compose.yml` — single Compose app for `app`, `proxy`, and optional `api`
-- `README.md` — human-facing setup and operations guide
-- `CLAUDE.md` — shared orchestration contract and architecture context
-- `AGENTS.md` — lean execution guide for coding agents in this root repo
+- `start.sh` — canonical local entrypoint for bootstrap, checks, start/stop, rebuild, logs, status, doctor, and test
+- `docker-compose.yml` — single Compose app named `project-lumen` for `app`, `proxy`, and optional `api`
+- `README.md` — human-facing local setup and operations guide
+- `CLAUDE.md` — shared orchestration contract
+- `AGENTS.md` — lean execution guide for this repo
 
 ## What `start.sh` Does
 - Bootstraps missing sibling repos via git clone
@@ -35,23 +35,25 @@ Supported commands:
 - `./start.sh --logs`
 - `./start.sh --logs=app`
 - `./start.sh --doctor`
+- `./start.sh --test`
 - `./start.sh --help`
-
-Command semantics:
-- `--down` stops the stack only
-- `--clean` stops the stack and removes Compose-managed project volumes and orphans
-- `--rebuild` runs the clean path first, then `docker compose up -d --build`
 
 ## Repo Responsibilities
 - Keep orchestration logic in this repo only
 - Keep frontend application logic in `project-lumen-light`
 - Keep backend application logic in `project-lumen-source`
-- Do not copy app code into this root repo just to “make startup easier”
+- Do not copy app code into this repo just to make startup easier
+
+## Current Cross-Repo Reality
+- Frontend and backend are wired for backend-managed auth
+- Frontend stores bearer tokens client-side and calls the backend directly
+- Backend owns JWT verification, RBAC, auth endpoints, schema/migration APIs, and admin APIs
+- The admin UI currently consumes backend stats/users/entries/schema/migrations/sql APIs
 
 ## Safety Rules
 - Never hardcode secrets
 - Do not commit populated `.env` files
-- Treat `--clean` as destructive local-data removal
+- Treat `--clean` as potentially destructive local-data removal
 - Prefer updating `start.sh`, `README.md`, `CLAUDE.md`, and `docker-compose.yml` together when behavior changes
 - Keep the normal happy path fast; bootstrap and repair work should only happen when required
 
@@ -65,5 +67,5 @@ Command semantics:
 
 ## Out of Scope
 - Frontend features
-- Backend endpoints or auth implementation details beyond orchestration contracts
+- Backend internals beyond orchestration contracts
 - Future roadmap phases unless explicitly requested
