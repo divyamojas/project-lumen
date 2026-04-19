@@ -578,15 +578,18 @@ wait_for_url() {
 
   require_command curl "curl is required for readiness checks."
 
+  say "${YELLOW}      ↳ $label  ${url}${NC}"
+
   while [ "$SECONDS" -lt "$deadline" ]; do
     if curl "${curl_args[@]}" "$url" > /dev/null 2>&1; then
-      say "${GREEN}      $label ready.${NC}"
+      elapsed=$((timeout_seconds - (deadline - SECONDS)))
+      say "${GREEN}        ✓ $label ready (${elapsed}s)${NC}"
       return 0
     fi
 
     elapsed=$((timeout_seconds - (deadline - SECONDS)))
     if [ "$elapsed" -ge "$next_progress" ]; then
-      say "${YELLOW}      Waiting for $label... ${elapsed}s/${timeout_seconds}s${NC}"
+      say "${YELLOW}        still waiting... ${elapsed}s / ${timeout_seconds}s${NC}"
       next_progress=$((next_progress + 5))
     fi
     sleep 1
@@ -601,15 +604,18 @@ wait_for_proxy() {
   local next_progress=5
   local elapsed=0
 
+  say "${YELLOW}      ↳ HTTPS proxy  https://localhost${NC}"
+
   while [ "$SECONDS" -lt "$deadline" ]; do
     if run_compose exec -T proxy wget -q --spider --no-check-certificate https://127.0.0.1 > /dev/null 2>&1; then
-      say "${GREEN}      HTTPS proxy ready.${NC}"
+      elapsed=$((timeout_seconds - (deadline - SECONDS)))
+      say "${GREEN}        ✓ HTTPS proxy ready (${elapsed}s)${NC}"
       return 0
     fi
 
     elapsed=$((timeout_seconds - (deadline - SECONDS)))
     if [ "$elapsed" -ge "$next_progress" ]; then
-      say "${YELLOW}      Waiting for HTTPS proxy... ${elapsed}s/${timeout_seconds}s${NC}"
+      say "${YELLOW}        still waiting... ${elapsed}s / ${timeout_seconds}s${NC}"
       next_progress=$((next_progress + 5))
     fi
     sleep 1
@@ -716,7 +722,12 @@ start_stack() {
   fi
   ok "Containers started"
 
-  step "Waiting for readiness"
+  if backend_can_start; then
+    step "Waiting for readiness — frontend, HTTPS proxy, API"
+  else
+    step "Waiting for readiness — frontend, HTTPS proxy"
+  fi
+
   if ! wait_for_url "Frontend" "http://127.0.0.1:3000" 60 --silent --show-error --fail; then
     capture_failure_logs
     fail "Frontend did not become ready within 60 seconds. Logs saved to $LOG_FILE"
