@@ -10,8 +10,9 @@ gets purpose-built fields and prompts. Entries can be backed up to an
 AWS S3 bucket configured for the Lumen deployment. An AI layer (in progress)
 will let you query your journal in natural language using Bedrock.
 
-**Status:** Phase 1 (core journaling) complete. Phase 2 (S3 sync) in progress.
-Phases 3–5 (Bedrock, NL query, sentiment) on the roadmap.
+**Status:** Phase 1 (core journaling) is usable but still being hardened.
+Phase 2 (deployment-managed S3 backup) is partially implemented and still in progress.
+Phases 3–5 (Bedrock, NL query, sentiment) remain on the roadmap.
 
 ---
 
