@@ -24,7 +24,7 @@ Do not move frontend or backend app logic into this repo.
 Do not treat this file as a replacement for the more specific `CLAUDE.md` files in the sub-repos.
 
 ## Files Owned Here
-- `start.sh` — canonical local entrypoint for bootstrap, checks, start/stop, rebuild, logs, and tests
+- `start.sh` — canonical local entrypoint for bootstrap, checks, clean/rebuild/start, logs, attached runs, and tests
 - `docker-compose.yml` — single Compose app named `project-lumen` for `app`, `proxy`, and optional `api`
 - `README.md` — human-facing setup and operations guide
 - `CLAUDE.md` — cross-repo orchestration contract
@@ -43,6 +43,9 @@ Use Docker only.
 ./start.sh --logs=app
 ./start.sh --doctor
 ./start.sh --test
+./start.sh --rebuild -v
+./start.sh --clean -a
+./start.sh --rebuild --attach
 ```
 
 Expected local URLs:
@@ -61,14 +64,23 @@ Expected local URLs:
 - Starts the single root Compose app from this repo
 - Enables the backend `api` profile automatically only when the backend repo exists and the required env keys are populated
 - Starts frontend-only when the backend repo is missing or its `.env` is not ready
+- Prints numbered startup phases and readiness progress while waiting
 - Waits for frontend, HTTPS proxy, and API readiness before printing success
 
 Command semantics:
 - `--down` stops the stack only
 - `--clean` stops the stack and can remove volumes/images/orphans/cache depending on flags
-- `--rebuild` rebuilds and starts the stack
+- `--rebuild` rebuilds and starts the stack, and cleanup flags can be layered onto it
 - `--doctor` runs bootstrap plus preflight checks without starting containers
 - `--test` delegates to backend tests via `test.sh`
+- `--attach` runs `docker compose up` attached instead of detached
+
+Cleanup flags:
+- `-v` / `--volumes`
+- `-i` / `--images`
+- `-o` / `--orphans`
+- `-c` / `--cache`
+- `-a` / `--all`
 
 The root `docker-compose.yml` owns the shared `lumen` bridge network for all local services.
 
@@ -137,6 +149,7 @@ Key backend routes used today:
 - Auth: `/auth/login`, `/auth/sign-up`, `/auth/reset-password`, `/auth/google/start`, `/auth/logout`
 - User: `/users/me`
 - Entries: `/entries`
+- Health: `/health`
 - Admin UI: `/admin/stats`, `/admin/users`, `/admin/entries`, `/admin/schema`, `/admin/schema/migrations`, `/admin/sql`
 
 Broader superuser APIs also exist for direct auth-user and generic table management; see backend context for the full list.

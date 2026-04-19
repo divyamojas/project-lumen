@@ -23,6 +23,7 @@ Sibling repos expected beside this root:
 - Seeds `project-lumen-source/.env` from `.env.example` when available
 - Starts the single root Docker Compose app
 - Enables the backend `api` profile only when the backend repo exists and its required env keys are populated
+- Prints numbered startup phases and readiness progress while waiting
 - Waits for frontend, HTTPS proxy, and API readiness before declaring success
 - Writes run logs to `logs/lumen-<timestamp>.log`
 
@@ -37,6 +38,9 @@ Supported commands:
 - `./start.sh --doctor`
 - `./start.sh --test`
 - `./start.sh --help`
+- `./start.sh --rebuild -a`
+- `./start.sh --clean -v`
+- `./start.sh --rebuild --attach`
 
 ## Repo Responsibilities
 - Keep orchestration logic in this repo only
@@ -54,6 +58,7 @@ Supported commands:
 - Never hardcode secrets
 - Do not commit populated `.env` files
 - Treat `--clean` as potentially destructive local-data removal
+- Treat `-a` / `--all` as the most destructive local cleanup path
 - Prefer updating `start.sh`, `README.md`, `CLAUDE.md`, and `docker-compose.yml` together when behavior changes
 - Keep the normal happy path fast; bootstrap and repair work should only happen when required
 
