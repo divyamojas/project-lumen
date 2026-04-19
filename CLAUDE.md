@@ -12,10 +12,13 @@ Current sibling repos:
 - `project-lumen-source/` — FastAPI backend
 
 Current product status across the stack:
-- Frontend and backend are now wired together for backend-managed authentication and authenticated API access
-- Frontend journal UX still keeps client-side persistence in IndexedDB/local cache
+- Frontend and backend are wired for backend-managed authentication and authenticated API access
+- Frontend has a full journal type system (6 types: personal, science, travel, fitness, work, creative) with per-type extra fields, prompt libraries, and templates
+- Frontend has onboarding, a public landing page, mood/theme picker, S3 sync status UI, account/data deletion, and legal pages
+- Frontend journal UX keeps client-side persistence in IndexedDB/local cache; backend is source of truth
 - Backend owns auth verification, entry CRUD, RBAC, admin APIs, schema introspection, migrations, and raw SQL
-- The admin UI currently uses the backend for stats, user management, entry inspection, schema, migrations, and SQL console access
+- The admin UI uses the backend for stats, user management, entry inspection, schema, migrations, and SQL console access
+- GitHub Actions CI is configured for the frontend repo (lint → test → build)
 
 ## Repo Boundaries
 Keep responsibilities separated:
