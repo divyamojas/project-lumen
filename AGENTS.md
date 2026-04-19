@@ -25,6 +25,7 @@ Sibling repos expected beside this root:
 - Enables the backend `api` profile only when the backend repo exists and its required env keys are populated
 - Prints numbered startup phases and readiness progress while waiting
 - Waits for frontend, HTTPS proxy, and API readiness before declaring success
+- Captures failing compose/bootstrap output into the run log and surfaces clearer diagnostics for offline/DNS, Docker access, port conflicts, rate limits, and readiness timeouts
 - Writes run logs to `logs/lumen-<timestamp>.log`
 
 Supported commands:

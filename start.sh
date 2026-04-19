@@ -129,6 +129,16 @@ fail() {
   exit 1
 }
 
+run_with_logging() {
+  local output_file="$1"
+  shift
+
+  mkdir -p "$LOG_DIR" > /dev/null 2>&1 || true
+  : > "$output_file"
+  "$@" 2>&1 | tee -a "$LOG_FILE" "$output_file"
+  return "${PIPESTATUS[0]}"
+}
+
 run_compose() {
   if [ "$VERBOSE" = true ]; then
     say "${YELLOW}→ ${COMPOSE_CMD[*]} ${COMPOSE_GLOBAL_ARGS[*]} $*${NC}"
@@ -137,12 +147,108 @@ run_compose() {
   cd "$ROOT_DIR" && "${COMPOSE_CMD[@]}" "${COMPOSE_GLOBAL_ARGS[@]}" "$@"
 }
 
+run_compose_logged() {
+  local output_file="$1"
+  shift
+
+  if [ "$VERBOSE" = true ]; then
+    say "${YELLOW}→ ${COMPOSE_CMD[*]} ${COMPOSE_GLOBAL_ARGS[*]} $*${NC}"
+  fi
+
+  run_with_logging "$output_file" bash -lc \
+    "cd \"$ROOT_DIR\" && \"\${@}\"" _ "${COMPOSE_CMD[@]}" "${COMPOSE_GLOBAL_ARGS[@]}" "$@"
+}
+
 run_git() {
   if [ "$VERBOSE" = true ]; then
     say "${YELLOW}→ git $*${NC}"
   fi
 
   git "$@"
+}
+
+run_git_logged() {
+  local output_file="$1"
+  shift
+
+  if [ "$VERBOSE" = true ]; then
+    say "${YELLOW}→ git $*${NC}"
+  fi
+
+  run_with_logging "$output_file" git "$@"
+}
+
+diagnose_failure() {
+  local action_label="$1"
+  local output_file="$2"
+  local error_text=""
+
+  if [ -f "$output_file" ]; then
+    error_text="$(tail -n 200 "$output_file" 2>/dev/null)"
+  fi
+
+  if echo "$error_text" | grep -Eqi "no such host|temporary failure in name resolution|name or service not known|could not resolve host|dial tcp: lookup|network is unreachable|i/o timeout|tls handshake timeout|connection timed out|failed to do request|failed to resolve source metadata"; then
+    fail "$action_label failed because the internet connection or DNS lookup is unavailable.\nNext steps:\n  1. Confirm your connection is up.\n  2. If Docker Desktop is running, check its network or proxy settings.\n  3. Retry once the machine can reach external hosts again.\nLogs saved to $LOG_FILE"
+  fi
+
+  if echo "$error_text" | grep -Eqi "toomanyrequests|429 too many requests|pull rate limit"; then
+    fail "$action_label failed because Docker Hub rate-limited the image pull.\nNext steps:\n  1. Sign in to Docker Desktop or docker hub.\n  2. Wait for the rate limit window to reset, then retry.\n  3. If your team mirrors base images internally, switch to that registry.\nLogs saved to $LOG_FILE"
+  fi
+
+  if echo "$error_text" | grep -Eqi "permission denied.*docker|got permission denied while trying to connect to the docker daemon socket|cannot connect to the docker daemon"; then
+    fail "$action_label failed because Docker is installed but not accessible from this shell.\nNext steps:\n  1. Make sure Docker Desktop is running.\n  2. If needed, restart Docker Desktop.\n  3. Retry after `docker info` works in this terminal.\nLogs saved to $LOG_FILE"
+  fi
+
+  if echo "$error_text" | grep -Eqi "port is already allocated|address already in use|bind:.*already in use"; then
+    fail "$action_label failed because one of the required ports is already in use.\nNext steps:\n  1. Run ./start.sh --status to see whether an older Lumen stack is still up.\n  2. Otherwise inspect listeners with lsof -nP -iTCP -sTCP:LISTEN.\n  3. Stop the conflicting service and retry.\nLogs saved to $LOG_FILE"
+  fi
+
+  fail "$action_label failed.\nLogs saved to $LOG_FILE"
+}
+
+container_name_for_service() {
+  case "$1" in
+    app)
+      echo "lumen-app"
+      ;;
+    proxy)
+      echo "lumen-proxy"
+      ;;
+    api)
+      echo "lumen-api"
+      ;;
+  esac
+}
+
+diagnose_readiness_timeout() {
+  local service="$1"
+  local label="$2"
+  local timeout_seconds="$3"
+  local container_name=""
+  local container_state=""
+  local exit_code=""
+
+  container_name="$(container_name_for_service "$service")"
+  container_state="$(docker inspect -f '{{.State.Status}}' "$container_name" 2>/dev/null || true)"
+  exit_code="$(docker inspect -f '{{.State.ExitCode}}' "$container_name" 2>/dev/null || true)"
+
+  case "$container_state" in
+    exited)
+      fail "$label did not become ready within ${timeout_seconds} seconds because the container exited early (exit code: ${exit_code:-unknown}).\nNext steps:\n  1. Inspect the service logs with ./start.sh --logs=$service\n  2. Review the captured startup log at $LOG_FILE\n  3. Fix the container error, then retry.\nLogs saved to $LOG_FILE"
+      ;;
+    restarting)
+      fail "$label did not become ready within ${timeout_seconds} seconds because the container is stuck restarting.\nNext steps:\n  1. Inspect the service logs with ./start.sh --logs=$service\n  2. Review the captured startup log at $LOG_FILE\n  3. Fix the repeated startup error, then retry.\nLogs saved to $LOG_FILE"
+      ;;
+    running)
+      fail "$label did not become ready within ${timeout_seconds} seconds. The container is still running, but the service never answered its readiness check.\nNext steps:\n  1. Inspect the service logs with ./start.sh --logs=$service\n  2. Confirm the service is listening on the expected port.\n  3. Retry after the underlying app error is fixed.\nLogs saved to $LOG_FILE"
+      ;;
+    created)
+      fail "$label did not become ready within ${timeout_seconds} seconds because the container was created but never finished starting.\nNext steps:\n  1. Inspect the service logs with ./start.sh --logs=$service\n  2. Review the captured startup log at $LOG_FILE\n  3. Retry after the startup issue is fixed.\nLogs saved to $LOG_FILE"
+      ;;
+    *)
+      fail "$label did not become ready within ${timeout_seconds} seconds.\nNext steps:\n  1. Inspect the stack logs with ./start.sh --logs\n  2. Review the captured startup log at $LOG_FILE\n  3. Retry after the underlying error is fixed.\nLogs saved to $LOG_FILE"
+      ;;
+  esac
 }
 
 stop_log_tails() {
@@ -281,11 +387,13 @@ clone_repo() {
   local dir="$1"
   local url="$2"
   local label="$3"
+  local output_file="$LOG_DIR/clone-$(basename "$dir").log"
 
   require_command git "Git is required to bootstrap the Lumen repositories."
 
   say "${YELLOW}$label not found. Cloning it now...${NC}"
-  run_git clone --depth 1 "$url" "$dir" || fail "Failed to clone $label from $url"
+  run_git_logged "$output_file" clone --depth 1 "$url" "$dir" || \
+    diagnose_failure "Bootstrapping $label" "$output_file"
 }
 
 ensure_repo_checkout() {
@@ -330,7 +438,8 @@ bootstrap_root_repo_if_needed() {
 
   if [ ! -d "$target_dir" ]; then
     say "${YELLOW}Root repo files are missing here. Bootstrapping $ROOT_REPO_NAME into $target_dir...${NC}"
-    run_git clone --depth 1 "$ROOT_REPO_URL" "$target_dir" || fail "Failed to bootstrap $ROOT_REPO_NAME from $ROOT_REPO_URL"
+    run_git_logged "$LOG_DIR/bootstrap-root.log" clone --depth 1 "$ROOT_REPO_URL" "$target_dir" || \
+      diagnose_failure "Bootstrapping $ROOT_REPO_NAME" "$LOG_DIR/bootstrap-root.log"
   fi
 
   chmod +x "$target_dir/start.sh" 2>/dev/null || true
@@ -697,9 +806,9 @@ start_stack() {
 
   if [ -n "$BUILD_FLAG" ]; then
     step "Building images"
-    if ! run_compose build; then
+    if ! run_compose_logged "$LOG_DIR/build-output.log" build; then
       capture_failure_logs
-      fail "Image build failed. Logs saved to $LOG_FILE"
+      diagnose_failure "Image build" "$LOG_DIR/build-output.log"
     fi
     ok "Images built"
     COMPOSE_UP_ARGS=()
@@ -716,9 +825,9 @@ start_stack() {
     return
   fi
 
-  if ! run_compose up -d "${COMPOSE_UP_ARGS[@]}"; then
+  if ! run_compose_logged "$LOG_DIR/up-output.log" up -d "${COMPOSE_UP_ARGS[@]}"; then
     capture_failure_logs
-    fail "Stack failed to start. Logs saved to $LOG_FILE\nDebug with:\n  cd project-lumen && docker compose logs"
+    diagnose_failure "Service startup" "$LOG_DIR/up-output.log"
   fi
   ok "Containers started"
 
@@ -730,18 +839,18 @@ start_stack() {
 
   if ! wait_for_url "Frontend" "http://127.0.0.1:3000" 60 --silent --show-error --fail; then
     capture_failure_logs
-    fail "Frontend did not become ready within 60 seconds. Logs saved to $LOG_FILE"
+    diagnose_readiness_timeout "app" "Frontend" 60
   fi
 
   if ! wait_for_proxy 60; then
     capture_failure_logs
-    fail "HTTPS proxy did not become ready within 60 seconds. Logs saved to $LOG_FILE"
+    diagnose_readiness_timeout "proxy" "HTTPS proxy" 60
   fi
 
   if backend_can_start; then
     if ! wait_for_url "API" "http://127.0.0.1:8000/health" 60 --silent --show-error --fail; then
       capture_failure_logs
-      fail "API did not become ready within 60 seconds. Logs saved to $LOG_FILE"
+      diagnose_readiness_timeout "api" "API" 60
     fi
   else
     info "API skipped (configure $BACKEND_ENV_FILE to enable)"

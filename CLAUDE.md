@@ -72,6 +72,7 @@ Expected local URLs:
 - Starts frontend-only when the backend repo is missing or its `.env` is not ready
 - Prints numbered startup phases and readiness progress while waiting
 - Waits for frontend, HTTPS proxy, and API readiness before printing success
+- Captures build/startup output into the run log and translates common failures into actionable messages (for example offline/DNS, Docker access, rate limits, port conflicts, and containers that never become ready)
 
 Command semantics:
 - `--down` stops the stack only
