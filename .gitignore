@@ -10,5 +10,8 @@ project-lumen-source/
 .env.local
 *.env
 
+# Next.js build output
+.next/
+
 # Runtime logs
 logs/
