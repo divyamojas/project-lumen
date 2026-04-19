@@ -132,7 +132,9 @@ Both application repos should stay aligned with this shape:
   checklist: Array<{ id: string, text: string, checked: boolean }>,
   templateId: string,
   promptId: string,
-  relatedEntryIds: string[]
+  relatedEntryIds: string[],
+  journal_type: string,   // one of: personal, science, travel, fitness, work, creative
+  type_metadata: object   // freeform, schema varies by journal_type
 }
 ```
 
@@ -150,9 +152,11 @@ Internal base URL inside Docker: `http://lumen-api:8000`
 
 Key backend routes used today:
 - Auth: `/auth/login`, `/auth/sign-up`, `/auth/reset-password`, `/auth/google/start`, `/auth/logout`
-- User: `/users/me`
+- User: `/users/me`, `DELETE /users/me`, `DELETE /users/me/entries`
 - Entries: `/entries`
 - Health: `/health`
+- Sync: `GET /sync/status`, `POST /sync/full`
+- Legal: `GET /legal/privacy`, `GET /legal/terms`
 - Admin UI: `/admin/stats`, `/admin/users`, `/admin/entries`, `/admin/schema`, `/admin/schema/migrations`, `/admin/sql`
 
 Broader superuser APIs also exist for direct auth-user and generic table management; see backend context for the full list.
@@ -178,6 +182,13 @@ Backend (optional/legacy):
 - `SUPABASE_ANON_KEY`
 - `CORS_ORIGINS`
 
+Backend (S3 sync — Phase 2):
+- `S3_SYNC_ENABLED` (default: `false`)
+- `S3_BUCKET_NAME`
+- `AWS_REGION`
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+
 ## Universal Rules
 Apply everywhere:
 - No TypeScript; frontend is JavaScript, backend is Python
@@ -189,4 +200,5 @@ Apply everywhere:
 
 ## Future Phases
 - Keep future roadmap work opt-in only
-- Do not automatically implement AWS/S3/Lambda/Bedrock/Comprehend work unless explicitly requested
+- S3 sync (Phase 2) is shipped — per-entry push on write, backfill via `/sync/full`
+- Do not automatically implement AWS Lambda/Bedrock/Comprehend work unless explicitly requested
