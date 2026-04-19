@@ -1,14 +1,14 @@
 # Lumen — Local Orchestrator
 
-> **Your journal. Your AWS. Your AI.**
-> A private, calm journal suite where your data lives on your own cloud —
+> **Your journal. Private backup. Future AI.**
+> A private, calm journal suite where your data stays under your Lumen deployment —
 > and where AI works *on your data*, not on someone else's servers.
 
 Lumen is a journaling suite for six use cases: personal reflection, science
 and research logging, travel, fitness, work, and creative writing. Each type
-gets purpose-built fields and prompts. All entries sync to your own AWS S3
-bucket. An AI layer (in progress) will let you query your journal in natural
-language using Bedrock — without your data ever leaving your infrastructure.
+gets purpose-built fields and prompts. Entries can be backed up to an
+AWS S3 bucket configured for the Lumen deployment. An AI layer (in progress)
+will let you query your journal in natural language using Bedrock.
 
 **Status:** Phase 1 (core journaling) complete. Phase 2 (S3 sync) in progress.
 Phases 3–5 (Bedrock, NL query, sentiment) on the roadmap.
@@ -44,3 +44,8 @@ docker compose up
 ```
 
 All features from v1 are present and improved in v2.
+
+The root `./start.sh` orchestrator in `project-lumen/` now reports actionable
+startup failures for common local issues such as no internet/DNS resolution,
+Docker access problems, port conflicts, Docker Hub rate limits, and services
+that start but never become ready.
