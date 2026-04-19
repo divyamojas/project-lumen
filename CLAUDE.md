@@ -1,3 +1,6 @@
+> ARCHIVED — This is the v1 prototype. Do not add features here.
+> See project-lumen-light for the active frontend.
+
 # Lumen Orchestrator — Claude Context
 
 ## Current State (as of 2026-04-19)
